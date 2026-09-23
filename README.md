@@ -65,12 +65,20 @@ WSL2.
 | | |
 |---|---|
 | OS | macOS or Linux |
-| pixi | the only prerequisite: `curl -fsSL https://pixi.sh/install.sh \| bash` |
+| pixi | `curl -fsSL https://pixi.sh/install.sh \| bash` |
+| macOS only | Xcode Command Line Tools (`xcode-select --install`), needed by `build-shard` — see below |
 | Disk | final outputs are small; intermediates dominate peak usage and are deleted as the run proceeds (`--notemp` keeps them, ~49 GB per 5-run cohort) |
 | GPU | optional — CUDA on Linux, Metal/MPS on Apple silicon, else CPU |
 
 MRtrix3, ANTs, PyTorch, the FEDI stack and SHARD-recon are all installed by
-pixi. You do not need conda, Docker, or an existing MRtrix install.
+pixi. You do not need conda, Docker, an existing MRtrix install, or even
+`git` — `build-shard` clones with conda's own git, not the host's.
+
+The one genuine host dependency is the **macOS SDK**. Conda's C++ compiler
+invokes `-isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk` and no
+SDK ships inside the environment, so `pixi run build-shard` needs Xcode
+Command Line Tools. Linux has no equivalent gap: `sysroot_linux-64` is in
+`pixi.lock`, so the toolchain is self-contained there.
 
 **Input must be single-echo DWI in valid BIDS.** Multi-echo data produces wrong
 output without erroring — see [CHANGES.md §13](CHANGES.md).

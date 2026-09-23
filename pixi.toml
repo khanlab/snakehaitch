@@ -17,6 +17,11 @@ snakemake = ">=8.14"
 # prefixes below, even though it never creates them.
 conda = "*"
 pip = "*"
+# archive_work.sh shells out to these. They are present by default on macOS but
+# not on minimal Linux images, and the README promises pixi is the only
+# prerequisite -- so they come from the environment rather than the host.
+zip = "*"
+unzip = "*"
 
 [pypi-dependencies]
 # Published snakebids, not a local clone: the app uses only released API

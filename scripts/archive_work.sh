@@ -49,6 +49,18 @@ case "${2:-}" in
     *)        echo "[archive] unknown option: $2" >&2 ; exit 2 ;;
 esac
 
+# zip/zipinfo are declared in pixi.toml's default feature, so `pixi run` always
+# has them. Someone driving the workflow with plain `snakemake --use-conda`
+# gets whatever the host provides -- present on macOS, frequently absent on a
+# minimal Linux image. Say so plainly rather than dying on "command not found".
+for _t in zip zipinfo; do
+    command -v "$_t" >/dev/null || {
+        echo "[archive] $_t not found. Install it, or run via 'pixi run archive'," >&2
+        echo "[archive] which supplies zip/unzip from the default environment." >&2
+        exit 1
+    }
+done
+
 if [[ ! -d "$WORK" ]]; then
     # Print the RESOLVED path: a typo or a cwd mix-up is otherwise invisible,
     # since this exits 0 so the onsuccess hook stays non-fatal when a previous
