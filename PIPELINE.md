@@ -454,12 +454,25 @@ Snakemake's own `--notemp` disables this wholesale ([dag.py:1015]), which makes
 it the single switch for "keep the intermediates" — no bespoke flag is needed,
 and archiving follows the same switch.
 
-> **What `temp()` costs.** On a run that *fails* partway, intermediates whose
-> consumers already finished are gone, so restarting recomputes further back
-> than it used to — potentially from denoising. A run that *completed* is
-> unaffected: its final outputs satisfy the DAG, and re-invoking reports
-> "Nothing to be done" even with `work/` absent (verified). Use `--notemp`
-> while iterating on a cohort, and plain runs for production.
+> **Resuming still works.** `temp()` never deletes a file while a job that
+> needs it is still pending, so an interrupted run keeps exactly the frontier
+> required to carry on, and `onsuccess` — which does the sweep — does not fire
+> on failure. Measured on an 8-volume dataset:
+>
+> | interruption | resume plan |
+> |---|---|
+> | `bias_correct` failed at 14/34 | restarts **at `bias_correct`**; `dwicrop.mif` and `biasmask.nii.gz` were retained because their consumer never completed |
+> | SIGINT during `union_mask` | restarts **at `union_mask`** (after `--rerun-incomplete`, since the kill left a half-written output) |
+>
+> Neither redoes denoising, Gibbs, Rician, `split_volumes` or
+> `segment_volumes`. A *completed* run is likewise unaffected: re-invoking
+> reports "Nothing to be done" with `work/` absent.
+>
+> **Where you do pay** is re-running an *already-completed* rule. The
+> intermediates behind it are gone, so the cascade reaches back to `denoise` —
+> `--forcerun crop_dwi` on the same dataset schedules 13 jobs rather than 3.
+> Segmentation is the exception: it resumes per volume from the mask cache.
+> Use `--notemp` when you expect to re-run stages with different parameters.
 
 The `onsuccess` hook also sweeps what `temp()` cannot reach. `temp()` only
 covers *declared* outputs, and `segment_volumes` deliberately writes its mask

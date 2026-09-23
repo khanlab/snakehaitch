@@ -175,11 +175,15 @@ Pass Snakemake's own **`--notemp`** to keep them. Then `work/` survives and is
 zipped to `work.zip` in store mode (the zip is verified against a snapshot
 taken before zipping; `--no-archive-work` skips it).
 
-Keep the intermediates when you intend to re-run against the same output
-directory — Snakemake reads `work/` to decide what is already done, and the
-segmentation mask cache lives there. Without it a partially finished cohort
-restarts from denoising. A *completed* run is unaffected: its final outputs
-already satisfy the DAG.
+**Interrupting a run is still safe.** `temp()` only deletes a file once no
+pending job needs it, and the end-of-run sweep does not fire on failure, so a
+stopped run resumes from where it stopped rather than from the beginning. Add
+`--rerun-incomplete` if you killed it mid-write.
+
+Use `--notemp` when you expect to **re-run a stage that already succeeded**
+with different parameters — that is the case where the missing intermediates
+force a cascade back to denoising. See
+[PIPELINE.md](PIPELINE.md#intermediates-and-the-work-archive) for measurements.
 
 ---
 
