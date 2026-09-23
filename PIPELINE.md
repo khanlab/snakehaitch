@@ -256,6 +256,17 @@ different files depending on whether a previous prediction exists:
 The GMM branch shells out to **`dwisliceoutliergmm`** — a SHARD-recon binary,
 not part of stock MRtrix3, compiled by `pixi run build-shard`.
 
+> `pixi run setup` provisions the shard *prefix* (a compiler toolchain plus
+> Python); `pixi run build-shard` puts the *binaries* in it. A prefix that
+> exists but was never built still looks provisioned to `tool_env()`, so
+> [common.smk](snakehaitch/workflow/rules/common.smk) checks for `mrinfo` and
+> `dwisliceoutliergmm` in `<prefix>/bin` before the DAG is built. Without that
+> check the failure lands in `shore_outliers_init` — about 30 minutes in, after
+> denoising and segmentation. And it lands as a bare `FileNotFoundError` on
+> **`mrinfo`**, not on `dwisliceoutliergmm`: iteration 0 skips the GMM branch
+> entirely but still calls `mrinfo` to derive `AXSLICES`. The build is per
+> checkout, since it installs into that project's `.pixi/`.
+
 **The GMM reorientation.** `dwisliceoutliergmm` slices along the image's third
 axis, but whether the slice axis *sits* there depends on stride layout, which
 varies per acquisition. The wrapper therefore derives `AXSLICES` as the index
@@ -441,11 +452,18 @@ It is a hook rather than a rule deliberately: making `work.zip` a DAG output
 would force it rebuilt whenever anything under a ~49 GB tree changed.
 
 The source tree is then **deleted**, but only after verification: the archive
-is written to a `.partial` name, renamed atomically, and its file-entry count
-compared against `find work/ -type f`. A mismatch, or any non-zero exit from
-`zip`, aborts before the `rm` and leaves the tree in place. `zipinfo` reads
-only the central directory, so the check is instant even at 49 GB — unlike
-`zip -T`, which would read every byte back.
+is written to a `.partial` name, renamed atomically, and then every file from
+a snapshot taken **before** zipping must be present in it. A missing file, or
+any non-zero exit from `zip`, aborts before the `rm` and leaves the tree in
+place. `zipinfo` reads only the central directory, so the check is instant even
+at 49 GB — unlike `zip -T`, which would read every byte back.
+
+> The snapshot is taken first on purpose. Counting files afterwards is racy:
+> anything created while `zip` runs looks like a file the archive is missing,
+> and a 19 GB archive takes minutes to write. On macOS this is routine — Finder
+> writes `.DS_Store` the moment anyone opens the output folder, which is enough
+> to block deletion of a perfectly good archive. `.DS_Store` is also excluded
+> outright, being Finder metadata rather than pipeline output.
 
 Deleting `work/` costs resumability. Snakemake reads it to decide what is
 already done, and the segmentation mask cache lives under it, so a subsequent

@@ -31,9 +31,19 @@
 # NOT affected; they live outside work/. Pass --keep, or --no-archive-work to
 # the app, if you intend to keep working on the same output directory.
 set -euo pipefail
+CALLER_PWD="$PWD"
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+# A relative argument means what the caller typed, resolved against THEIR cwd
+# -- not against the app root we just cd'd into. Without this, running
+# `bash snakehaitch-app/scripts/archive_work.sh derivatives_v2/work` from the
+# parent directory silently reports "nothing to do" and exits 0, because
+# derivatives_v2/ does not exist relative to the app root. The bare default
+# stays relative to the app root, which is where `pixi run archive` puts it.
 WORK="${1:-derivatives/work}"
+if [[ -n "${1:-}" && "$WORK" != /* ]]; then
+    WORK="${CALLER_PWD}/${WORK}"
+fi
 KEEP=0
 case "${2:-}" in
     --keep)   KEEP=1 ;;
@@ -43,7 +53,10 @@ case "${2:-}" in
 esac
 
 if [[ ! -d "$WORK" ]]; then
-    echo "[archive] nothing to do: $WORK does not exist"
+    # Print the RESOLVED path: a typo or a cwd mix-up is otherwise invisible,
+    # since this exits 0 so the onsuccess hook stays non-fatal when a previous
+    # run already archived and removed the tree.
+    echo "[archive] nothing to do: no such directory: $WORK"
     exit 0
 fi
 
@@ -51,10 +64,29 @@ OUT="${WORK%/}.zip"
 SIZE=$(du -sh "$WORK" | cut -f1)
 echo "[archive] $WORK ($SIZE) -> $OUT  (store mode; contents are pre-compressed)"
 
+# Snapshot the file list BEFORE zipping, and verify against this snapshot
+# rather than against a fresh count afterwards.
+#
+# Counting after the fact is racy: anything that appears in work/ while zip is
+# running looks like a file the archive is missing. On macOS that is routine --
+# Finder drops a .DS_Store the moment someone browses the output directory, and
+# a 19 GB archive takes minutes to write. The first version of this script
+# refused to delete a perfectly good archive for exactly that reason.
+#
+# .DS_Store is excluded outright: it is Finder metadata, not pipeline output,
+# and it is the one file likely to be created mid-archive.
+EXCLUDE='.DS_Store'
+LIST=$(mktemp); GOT=$(mktemp); MISSING=$(mktemp)
+trap 'rm -f "$LIST" "$GOT" "$MISSING"' EXIT
+
+( cd "$(dirname "$WORK")" \
+  && find "$(basename "$WORK")" -type f ! -name "$EXCLUDE" | sort ) > "$LIST"
+
 # -0 store, -q quiet, -r recurse. Write to a temp name so an interrupted run
 # never leaves a half-written archive that looks complete.
 rm -f "${OUT}.partial"
-( cd "$(dirname "$WORK")" && zip -0 -q -r "$(basename "${OUT}").partial" "$(basename "$WORK")" )
+( cd "$(dirname "$WORK")" \
+  && zip -0 -q -r "$(basename "${OUT}").partial" "$(basename "$WORK")" -x "*/$EXCLUDE" "$EXCLUDE" )
 mv "${OUT}.partial" "$OUT"
 
 echo "[archive] wrote $OUT ($(du -sh "$OUT" | cut -f1))"
@@ -64,20 +96,22 @@ if [[ "$KEEP" == "1" ]]; then
     exit 0
 fi
 
-# Verify before deleting anything. zipinfo reads only the central directory,
-# so this is fast even on a 49 GB archive -- unlike `zip -T`, which would have
-# to read every byte back. Directory entries end in '/' and are excluded so
-# the count matches `find -type f`.
-want=$(find "$WORK" -type f | wc -l | tr -d ' ')
-got=$(zipinfo -1 "$OUT" 2>/dev/null | grep -cv '/$' || true)
+# Verify before deleting anything: every file in the pre-zip snapshot must be
+# present in the archive. A set difference, not a count -- extra entries in the
+# archive are harmless, absent ones are not. zipinfo reads only the central
+# directory, so this is fast even on a 49 GB archive, unlike `zip -T` which
+# would have to read every byte back. Directory entries end in '/'.
+zipinfo -1 "$OUT" 2>/dev/null | grep -v '/$' | sort > "$GOT"
+comm -23 "$LIST" "$GOT" > "$MISSING"
 
-if [[ "$want" != "$got" ]]; then
-    echo "[archive] REFUSING to delete: $OUT holds $got file entries but $WORK has $want." >&2
+if [[ -s "$MISSING" ]]; then
+    echo "[archive] REFUSING to delete: $(wc -l < "$MISSING" | tr -d ' ') file(s) are in $WORK but not in $OUT:" >&2
+    head -10 "$MISSING" | sed 's/^/[archive]   /' >&2
     echo "[archive] the tree is untouched; inspect the archive before removing it by hand." >&2
     exit 1
 fi
 
-echo "[archive] verified $got/$want files; removing $WORK"
+echo "[archive] verified $(wc -l < "$LIST" | tr -d ' ') files; removing $WORK"
 rm -rf "$WORK"
 echo "[archive] done. Restore with: unzip -d $(dirname "$WORK") $OUT"
 echo "[archive] note: without work/, the next run recomputes rather than resumes."

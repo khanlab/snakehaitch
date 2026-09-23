@@ -94,6 +94,12 @@ pixi run build-shard  # compiles SHARD-recon -- 30-60 min, once
 any conda channel. Use `SHARD_BUILD_JOBS=8 pixi run build-shard` to control
 parallelism.
 
+> **Once per checkout, not once per machine.** The build installs into this
+> project's `.pixi/envs/shard`. A second clone gets its own empty `shard`
+> environment from `pixi run setup`, and `setup` alone is not enough — it
+> provisions the compiler toolchain, not the binaries. The workflow checks for
+> them before building its DAG and stops immediately if they are absent.
+
 ### Convert data to BIDS
 
 The app requires valid BIDS. If your data is in the raw HAITCH layout:
@@ -162,8 +168,9 @@ rising at high b-value is expected — step 5 takes a union across volumes for
 exactly that reason.
 
 On success `work/` is zipped to `work.zip` in store mode and then **deleted**.
-Deletion happens only after the archive is verified to hold exactly as many
-files as the tree did; if that check fails, the tree is left alone.
+Deletion happens only after the archive is verified to contain every file
+that was present when zipping started; if that check fails, the tree is left
+alone.
 
 The cost is resumability: Snakemake reads `work/` to decide what is already
 done, and the segmentation mask cache lives there. Once it is gone, a later
@@ -186,7 +193,7 @@ dominates. Wall clock scales with iteration count rather than subject count.
 
 | symptom | cause |
 |---|---|
-| `dwisliceoutliergmm: command not found` | `pixi run build-shard` not run |
+| `shard environment ... provisioned but not built` | `pixi run build-shard` not run in *this* checkout |
 | `Nothing to be done` | everything up to date; use `--forcerun <rule>` |
 | `Directory cannot be locked` | a run is active, or one was killed — `--unlock` |
 | `IncompleteFilesException` | interrupted mid-write — `--rerun-incomplete` |

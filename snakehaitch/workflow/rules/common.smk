@@ -46,6 +46,45 @@ def tool_env(name):
         return str(prefix.resolve())
     return f"../envs/{name}.yaml"
 
+
+# -----------------------------------------------------------------------------
+# Preflight: the compiled binaries
+# -----------------------------------------------------------------------------
+# `pixi run setup` provisions the shard PREFIX, but the binaries inside it come
+# from a separate source build (`pixi run build-shard`). A prefix that exists
+# but was never built therefore looks provisioned to tool_env() and fails only
+# once motion correction starts -- roughly 30 minutes into a run, after
+# denoising and segmentation have already been paid for.
+#
+# outlier_detection_wrapper.py calls mrinfo (to derive AXSLICES) before it ever
+# calls dwisliceoutliergmm, so a half-built prefix surfaces as a bare
+# FileNotFoundError on mrinfo rather than the documented
+# "dwisliceoutliergmm: command not found". Check both.
+#
+# Only meaningful for a pixi prefix: under the YAML fallback Snakemake has not
+# created the environment yet at DAG-build time, so there is nothing to inspect.
+
+def _check_shard_binaries():
+    prefix = PIXI_ENVS / "shard"
+    if not prefix.is_dir():
+        return  # YAML fallback; nothing built yet by definition
+    missing = [b for b in ("mrinfo", "dwisliceoutliergmm")
+               if not (prefix / "bin" / b).exists()]
+    if missing:
+        raise WorkflowError(
+            "The shard environment at {} is provisioned but not built: {} "
+            "missing from its bin/.\n"
+            "Motion correction needs these. Run:\n\n"
+            "    pixi run build-shard\n\n"
+            "It compiles MRtrix3 and the SHARD-recon module from source "
+            "(30-60 min, once per machine). Set SHARD_BUILD_JOBS to control "
+            "parallelism.".format(prefix, ", ".join(missing))
+        )
+
+
+_check_shard_binaries()
+
+
 # Root for all derivatives written by this app.
 DERIV = Path(config["output_dir"])
 
