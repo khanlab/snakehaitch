@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Archive the pipeline's intermediate work/ tree into a single zip, then
-# delete the tree.
+# Archive the pipeline's intermediate work/ tree into a single zip.
 #
-# Called automatically by the workflow's onsuccess hook (see Snakefile), and
-# available by hand as `pixi run archive`.
+# Called automatically by the workflow's onsuccess hook (see Snakefile) when a
+# run uses --notemp, and available by hand as `pixi run archive`.
 #
-#   archive_work.sh <work_dir>            zip, verify, delete   (default)
-#   archive_work.sh <work_dir> --keep     zip, verify, keep the tree
+#   archive_work.sh <work_dir>            zip, verify, keep     (default)
+#   archive_work.sh <work_dir> --remove   zip, verify, delete the tree
 #
 # STORE MODE, NOT DEFLATE
 # -----------------------
@@ -15,21 +14,19 @@
 # few percent, so the archive is created with -0 (store). The point here is
 # packaging into one movable artefact, not saving space.
 #
-# WHY DELETION IS SAFE TO DEFAULT TO
-# ----------------------------------
-# Deletion only ever happens after the archive has been written to a .partial
-# name, renamed into place atomically, and verified to contain exactly as many
-# file entries as the tree does. If any of that fails the tree is left alone.
-# Nothing is lost that `unzip work.zip` cannot restore.
+# THE TREE IS KEPT BY DEFAULT
+# ---------------------------
+# Removing intermediates is temp()'s job, not this script's: every work/ output
+# is declared temp(), so a normal run deletes each file as soon as nothing
+# needs it and leaves no tree to archive at all. This script therefore only
+# runs when the user asked to keep the intermediates (--notemp), and deleting
+# them here would contradict that.
 #
-# WHAT IT COSTS YOU
-# -----------------
-# Snakemake uses work/ to decide what is already done, and the segmentation
-# mask cache lives there. With the tree gone, a later incremental run -- adding
-# a subject, --forcerun, resuming a partial cohort -- recomputes from scratch
-# instead of resuming. Completed final outputs under <output_dir>/sub-*/ are
-# NOT affected; they live outside work/. Pass --keep, or --no-archive-work to
-# the app, if you intend to keep working on the same output directory.
+# --remove stays available for the by-hand case. When used, deletion happens
+# only after the archive has been written to a .partial name, renamed into
+# place atomically, and verified to contain every file present when zipping
+# started. If any of that fails the tree is left alone, and nothing is lost
+# that `unzip work.zip` cannot restore.
 set -euo pipefail
 CALLER_PWD="$PWD"
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -44,10 +41,10 @@ WORK="${1:-derivatives/work}"
 if [[ -n "${1:-}" && "$WORK" != /* ]]; then
     WORK="${CALLER_PWD}/${WORK}"
 fi
-KEEP=0
+REMOVE=0
 case "${2:-}" in
-    --keep)   KEEP=1 ;;
-    --remove) ;;   # accepted for backwards compatibility; now the default
+    --remove) REMOVE=1 ;;
+    --keep)   ;;   # accepted for symmetry; keeping is the default
     "")       ;;
     *)        echo "[archive] unknown option: $2" >&2 ; exit 2 ;;
 esac
@@ -91,8 +88,8 @@ mv "${OUT}.partial" "$OUT"
 
 echo "[archive] wrote $OUT ($(du -sh "$OUT" | cut -f1))"
 
-if [[ "$KEEP" == "1" ]]; then
-    echo "[archive] keeping $WORK as requested (--keep)"
+if [[ "$REMOVE" != "1" ]]; then
+    echo "[archive] keeping $WORK (pass --remove to delete it)"
     exit 0
 fi
 
@@ -111,7 +108,7 @@ if [[ -s "$MISSING" ]]; then
     exit 1
 fi
 
-echo "[archive] verified $(wc -l < "$LIST" | tr -d ' ') files; removing $WORK"
+echo "[archive] verified $(wc -l < "$LIST" | tr -d ' ') files; removing $WORK as requested (--remove)"
 rm -rf "$WORK"
 echo "[archive] done. Restore with: unzip -d $(dirname "$WORK") $OUT"
 echo "[archive] note: without work/, the next run recomputes rather than resumes."

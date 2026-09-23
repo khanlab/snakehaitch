@@ -66,7 +66,7 @@ WSL2.
 |---|---|
 | OS | macOS or Linux |
 | pixi | the only prerequisite: `curl -fsSL https://pixi.sh/install.sh \| bash` |
-| Disk | ~55 GB per 5-run cohort; intermediates dominate |
+| Disk | final outputs are small; intermediates dominate peak usage and are deleted as the run proceeds (`--notemp` keeps them, ~49 GB per 5-run cohort) |
 | GPU | optional — CUDA on Linux, Metal/MPS on Apple silicon, else CPU |
 
 MRtrix3, ANTs, PyTorch, the FEDI stack and SHARD-recon are all installed by
@@ -140,8 +140,8 @@ particularly `--rerun-triggers mtime`, which is a development default.
 | `--shore-epochs` | 6 | a faster first pass → `3` |
 | `--seg-device` | `auto` | forcing `cpu` / `cuda` / `mps` |
 | `--downstream` | off | you have T2w + an atlas (untested) |
-| `--keep-work` | off | you will re-run against this output dir — keeps `work/` |
-| `--no-archive-work` | off | you want neither the zip nor the deletion |
+| `--notemp` | off | you want the intermediates kept (Snakemake's own flag) |
+| `--no-archive-work` | off | with `--notemp`, keep `work/` but skip the zip |
 
 `pixi run snakehaitch --help` lists everything.
 [PIPELINE.md](PIPELINE.md#parameter-reference) has the full table and the
@@ -159,25 +159,27 @@ reasoning behind each default.
 │   ├── ..._desc-preproc_dwi.bval
 │   └── ..._desc-brain_mask.nii.gz     brain mask
 ├── qc/..._segmentation.png            per-volume mask QC
-├── work/                              intermediates (large)
-└── work.zip                           archive; work/ is deleted once verified
+└── work.zip                           only with --notemp; work/ kept beside it
 ```
 
 Check `qc/*_segmentation.png` first. Mask volume dropping and component counts
 rising at high b-value is expected — step 5 takes a union across volumes for
 exactly that reason.
 
-On success `work/` is zipped to `work.zip` in store mode and then **deleted**.
-Deletion happens only after the archive is verified to contain every file
-that was present when zipping started; if that check fails, the tree is left
-alone.
+**There is no `work/` after a normal run.** Every intermediate is declared
+`temp()`, so Snakemake deletes each one as soon as no remaining job needs it,
+and the hook sweeps whatever is left. A finished run leaves only `sub-*/` and
+`qc/`.
 
-The cost is resumability: Snakemake reads `work/` to decide what is already
-done, and the segmentation mask cache lives there. Once it is gone, a later
-incremental run recomputes rather than resumes. Final outputs under
-`sub-*/` are unaffected. Pass `--keep-work` if you intend to keep working on
-the same output directory, or restore with
-`unzip -d <output_dir> <output_dir>/work.zip`.
+Pass Snakemake's own **`--notemp`** to keep them. Then `work/` survives and is
+zipped to `work.zip` in store mode (the zip is verified against a snapshot
+taken before zipping; `--no-archive-work` skips it).
+
+Keep the intermediates when you intend to re-run against the same output
+directory — Snakemake reads `work/` to decide what is already done, and the
+segmentation mask cache lives there. Without it a partially finished cohort
+restarts from denoising. A *completed* run is unaffected: its final outputs
+already satisfy the DAG.
 
 ---
 

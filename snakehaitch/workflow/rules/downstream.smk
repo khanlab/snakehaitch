@@ -79,7 +79,7 @@ rule mean_b0:
         bval=rules.shore_finalize.output.bval,
         bvec=rules.shore_finalize.output.bvec,
     output:
-        b0=work("meanb0", extension=".nii.gz"),
+        b0=temp(work("meanb0", extension=".nii.gz")),
     conda:
         tool_env("mrtrix")
     shell:
@@ -94,9 +94,9 @@ rule atlas_to_t2w:
         atlas=lambda w: atlas_image(w),
         regional=lambda w: atlas_labels(w),
     output:
-        labels=work("regional", space="T2w", extension=".nii.gz"),
-        warp=work("atlas2t2w", extension="1Warp.nii.gz"),
-        affine=work("atlas2t2w", extension="0GenericAffine.mat"),
+        labels=temp(work("regional", space="T2w", extension=".nii.gz")),
+        warp=temp(work("atlas2t2w", extension="1Warp.nii.gz")),
+        affine=temp(work("atlas2t2w", extension="0GenericAffine.mat")),
     conda:
         tool_env("ants")
     shell:
@@ -122,7 +122,7 @@ rule labels_to_dwi:
         b0=rules.mean_b0.output.b0,
         labels=rules.atlas_to_t2w.output.labels,
     output:
-        labels=work("regional", space="DWI", extension=".nii.gz"),
+        labels=temp(work("regional", space="DWI", extension=".nii.gz")),
     conda:
         tool_env("ants")
     shell:
@@ -142,7 +142,7 @@ rule extract_roi:
     input:
         labels=rules.labels_to_dwi.output.labels,
     output:
-        roi=work("roi", label="{label}", extension=".nii.gz"),
+        roi=temp(work("roi", label="{label}", extension=".nii.gz")),
     params:
         label_id=lambda w: LABELS[w.label],
     conda:
@@ -159,9 +159,9 @@ rule response_and_fod:
         bvec=rules.shore_finalize.output.bvec,
         mask=rules.shore_finalize.output.mask,
     output:
-        wm=work("responsewm", extension=".txt"),
-        csf=work("responsecsf", extension=".txt"),
-        fod=work("wmfod", extension=".mif"),
+        wm=temp(work("responsewm", extension=".txt")),
+        csf=temp(work("responsecsf", extension=".txt")),
+        fod=temp(work("wmfod", extension=".mif")),
     conda:
         tool_env("mrtrix")
     shell:

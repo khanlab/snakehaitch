@@ -43,7 +43,7 @@ checkpoint split_volumes:
     input:
         dwi=rules.rician_correct.output.dwi,
     output:
-        voldir=directory(work("volumes", extension="")),
+        voldir=temp(directory(work("volumes", extension=""))),
     conda:
         tool_env("mrtrix")
     shell:
@@ -77,7 +77,7 @@ rule segment_volumes:
         voldir=rules.split_volumes.output.voldir,
         weights=rules.fetch_fetalbet_weights.output.weights,
     output:
-        maskdir=directory(work("masks", extension="")),
+        maskdir=temp(directory(work("masks", extension=""))),
     params:
         device=lambda w: hp("seg_device", default="auto"),
         precision=lambda w: hp("seg_precision", default="fp16"),

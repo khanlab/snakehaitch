@@ -21,7 +21,7 @@ rule make_grad_table:
         bval=bval_input,
         bvec=bvec_input,
     output:
-        grad=work("grad", extension=".txt"),
+        grad=temp(work("grad", extension=".txt")),
     conda:
         tool_env("mrtrix")
     shell:
@@ -38,7 +38,7 @@ rule make_acqparams:
     input:
         json=json_input,
     output:
-        acqp=work("acqparams", extension=".txt"),
+        acqp=temp(work("acqparams", extension=".txt")),
     conda:
         tool_env("fedi")
     script:
@@ -50,8 +50,8 @@ rule make_grad5cls:
     input:
         grad=rules.make_grad_table.output.grad,
     output:
-        grad5=work("grad5cls", extension=".txt"),
-        index=work("eddyindex", extension=".txt"),
+        grad5=temp(work("grad5cls", extension=".txt")),
+        index=temp(work("eddyindex", extension=".txt")),
     conda:
         tool_env("fedi")
     shell:
@@ -64,9 +64,9 @@ rule denoise:
     input:
         dwi=dwi_input,
     output:
-        dwi=work("dwide", extension=".mif"),
-        noise=work("noisemapfull", extension=".mif"),
-        residuals=work("denoiseresiduals", extension=".mif"),
+        dwi=temp(work("dwide", extension=".mif")),
+        noise=temp(work("noisemapfull", extension=".mif")),
+        residuals=temp(work("denoiseresiduals", extension=".mif")),
     params:
         estimator=lambda w: hp("denoise_estimator", "denoise", "estimator",
                                default="Exp2"),
@@ -87,7 +87,7 @@ rule degibbs:
         index=rules.make_grad5cls.output.index,
         acqp=rules.make_acqparams.output.acqp,
     output:
-        dwi=work("dwigb", extension=".mif"),
+        dwi=temp(work("dwigb", extension=".mif")),
     conda:
         tool_env("mrtrix")
     shell:
@@ -112,7 +112,7 @@ rule lowb_noisemap:
         grad5=rules.make_grad5cls.output.grad5,
         bval=bval_input,
     output:
-        noise=work("noisemaplowb", extension=".mif"),
+        noise=temp(work("noisemaplowb", extension=".mif")),
         discard=temp(work("lowbdenoised", extension=".mif")),
     params:
         estimator=lambda w: hp("denoise_estimator", "denoise", "estimator",
@@ -145,7 +145,7 @@ rule rician_correct:
         index=rules.make_grad5cls.output.index,
         acqp=rules.make_acqparams.output.acqp,
     output:
-        dwi=work("dwirc", extension=".mif"),
+        dwi=temp(work("dwirc", extension=".mif")),
     conda:
         tool_env("mrtrix")
     shell:

@@ -399,8 +399,8 @@ convenience; for a production run pass the full set:
 
 **On success** the workflow zips `work/` to `work.zip` in store mode via an
 `onsuccess` hook — not a rule, so it is not rebuilt on every partial re-run —
-then deletes the tree. `--keep-work` retains it; `--no-archive-work` skips the
-step entirely.
+then deletes the tree. Without `--notemp` there is no tree to archive in the
+first place; `--no-archive-work` skips the zip while still keeping it.
 
 ---
 
@@ -440,9 +440,36 @@ given enough cores. `--shore-epochs 3` is the effective lever, removing ~15
 `shorerecon.py` uses more. That over-subscription is the likely reason its mean
 (998 s) exceeds the 905 s measured for a single job in isolation.
 
-### The work/ archive
+### Intermediates and the work/ archive
 
-On success an `onsuccess` hook zips the intermediate tree to `work.zip` in
+**By default there is no `work/` when a run finishes.** Every output under it
+is declared `temp()`, so Snakemake deletes each file as soon as no remaining
+job needs it — `dwide.mif` goes the moment `degibbs` and `rician_correct` have
+read it, each `spred_iter{i}` goes once iteration *i+1* is done. A dry run
+lists the schedule: 116 removals for a two-session subject. Peak disk is
+therefore bounded by what is concurrently live rather than by the ~49 GB the
+tree used to accumulate, and a finished run leaves only `sub-*/` and `qc/`.
+
+Snakemake's own `--notemp` disables this wholesale ([dag.py:1015]), which makes
+it the single switch for "keep the intermediates" — no bespoke flag is needed,
+and archiving follows the same switch.
+
+> **What `temp()` costs.** On a run that *fails* partway, intermediates whose
+> consumers already finished are gone, so restarting recomputes further back
+> than it used to — potentially from denoising. A run that *completed* is
+> unaffected: its final outputs satisfy the DAG, and re-invoking reports
+> "Nothing to be done" even with `work/` absent (verified). Use `--notemp`
+> while iterating on a cohort, and plain runs for production.
+
+The `onsuccess` hook also sweeps what `temp()` cannot reach. `temp()` only
+covers *declared* outputs, and `segment_volumes` deliberately writes its mask
+cache outside its declared output — Snakemake erases `directory()` outputs
+before re-running a job, which would destroy resumability. That cache and the
+empty directory skeleton are removed by the hook.
+
+#### Under `--notemp`
+
+The hook zips the retained tree to `work.zip` in
 **store mode** — its contents are `.nii.gz` and `.mif`, already compressed, so
 deflating again costs significant CPU for a few percent. The archive exists to
 package intermediates into one movable artefact, not to save space; for real
@@ -451,12 +478,14 @@ compression use `tar` + `zstd`.
 It is a hook rather than a rule deliberately: making `work.zip` a DAG output
 would force it rebuilt whenever anything under a ~49 GB tree changed.
 
-The source tree is then **deleted**, but only after verification: the archive
-is written to a `.partial` name, renamed atomically, and then every file from
-a snapshot taken **before** zipping must be present in it. A missing file, or
-any non-zero exit from `zip`, aborts before the `rm` and leaves the tree in
-place. `zipinfo` reads only the central directory, so the check is instant even
-at 49 GB — unlike `zip -T`, which would read every byte back.
+The tree is **kept** — you asked for it with `--notemp`, so the hook does not
+remove it. `pixi run archive <dir> --remove` deletes it by hand, and only after
+verification: the archive is written to a `.partial` name, renamed atomically,
+and then every file from a snapshot taken **before** zipping must be present in
+it. A missing file, or any non-zero exit from `zip`, aborts before the `rm` and
+leaves the tree in place. `zipinfo` reads only the central directory, so the
+check is instant even at 49 GB — unlike `zip -T`, which would read every byte
+back.
 
 > The snapshot is taken first on purpose. Counting files afterwards is racy:
 > anything created while `zip` runs looks like a file the archive is missing,
@@ -465,16 +494,15 @@ at 49 GB — unlike `zip -T`, which would read every byte back.
 > to block deletion of a perfectly good archive. `.DS_Store` is also excluded
 > outright, being Finder metadata rather than pipeline output.
 
-Deleting `work/` costs resumability. Snakemake reads it to decide what is
-already done, and the segmentation mask cache lives under it, so a subsequent
-incremental run — adding a subject, `--forcerun`, resuming a partial cohort —
-recomputes instead of resuming. Outputs under `<output_dir>/sub-*/` live
-outside `work/` and are unaffected.
+Removing `work/` — by `temp()` or by hand — costs resumability, since
+Snakemake reads it to decide what is already done and the mask cache lives
+under it. Outputs under `<output_dir>/sub-*/` are outside `work/` and
+unaffected either way.
 
 ```bash
---keep-work                                    # zip, keep the tree
---no-archive-work                              # neither zip nor delete
-pixi run archive <output_dir>/work --keep      # by hand, keeping it
+--notemp                                       # keep intermediates + zip them
+--notemp --no-archive-work                     # keep them, skip the zip
+pixi run archive <output_dir>/work --remove    # by hand: zip, verify, delete
 unzip -d <output_dir> <output_dir>/work.zip    # restore afterwards
 ```
 
@@ -498,7 +526,7 @@ All exposed on the CLI; defaults in `config/snakebids.yml`.
 | `--tract-select` | 5000 | downstream |
 | `--tract-cutoff` | 0.05 | downstream |
 | `--atlas-dir` | — | downstream |
-| `--keep-work` | off | post |
+| `--notemp` (Snakemake) | off | post |
 | `--no-archive-work` | off | post |
 
 Non-CLI parameters (whole-brain tckgen settings, atlas label IDs, bundle

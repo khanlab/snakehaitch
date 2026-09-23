@@ -102,8 +102,8 @@ rule shore_prepare:
         mask=rules.match_mask_to_dwi.output.mask,
         raw=dwi_input,
     output:
-        dwi=work("dwimc", desc="init", extension=".nii.gz"),
-        mask=work("mcmask", extension=".nii.gz"),
+        dwi=temp(work("dwimc", desc="init", extension=".nii.gz")),
+        mask=temp(work("mcmask", extension=".nii.gz")),
     conda:
         tool_env("mrtrix")
     shell:
@@ -145,7 +145,7 @@ rule shore_outliers_init:
         # as the bash does at step 0 (lines 137-149).
         raw=dwi_input,
     output:
-        weights_mz=work("weightsmzscore", desc="iter{iter}", extension=".txt"),
+        weights_mz=temp(work("weightsmzscore", desc="iter{iter}", extension=".txt")),
     wildcard_constraints:
         iter="0",
     conda:
@@ -171,8 +171,8 @@ rule shore_outliers_gmm:
         # for this data (see the patch note in _fedi_outlierdetection.py).
         grad=rules.make_grad_table.output.grad,
     output:
-        weights_mz=work("weightsmzscore", desc="iter{iter}", extension=".txt"),
-        weights_gmm=work("weightsgmm", desc="iter{iter}", extension=".txt"),
+        weights_mz=temp(work("weightsmzscore", desc="iter{iter}", extension=".txt")),
+        weights_gmm=temp(work("weightsgmm", desc="iter{iter}", extension=".txt")),
     wildcard_constraints:
         iter="[1-9][0-9]*",
     conda:
@@ -192,7 +192,7 @@ rule shore_fit:
         mask=rules.shore_prepare.output.mask,
         weights=weights_for_iter,
     output:
-        spred=work("spred", desc="iter{iter}", extension=".nii.gz"),
+        spred=temp(work("spred", desc="iter{iter}", extension=".nii.gz")),
     conda:
         tool_env("fedi")
     script:
@@ -213,9 +213,9 @@ rule shore_register:
         # independent. A previously rotated table would compound rotations.
         bvec=bvec_input,
     output:
-        dwi=work("dwimc", desc="iter{iter}", extension=".nii.gz"),
-        bvec=work("bvec", desc="iter{iter}", extension=".txt"),
-        xfmdir=directory(work("xfm", desc="iter{iter}", extension="")),
+        dwi=temp(work("dwimc", desc="iter{iter}", extension=".nii.gz")),
+        bvec=temp(work("bvec", desc="iter{iter}", extension=".txt")),
+        xfmdir=temp(directory(work("xfm", desc="iter{iter}", extension=""))),
     wildcard_constraints:
         iter="|".join(str(i) for i in SHORE_ITER_REG) or r"(?!)",
     conda:

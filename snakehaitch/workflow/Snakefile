@@ -53,12 +53,33 @@ include: "rules/downstream.smk"
 
 
 onsuccess:
-    # Package the intermediate tree once the whole workflow has succeeded.
-    # An onsuccess hook rather than a rule, deliberately: making work.zip a
-    # DAG output would force it to be rebuilt whenever anything under work/
-    # changed, which for a ~49 GB tree is minutes of pointless zipping on
-    # every partial re-run.
-    if not config.get("no_archive_work"):
+    # work/ exists only under --notemp.
+    #
+    # Every intermediate is declared temp(), so Snakemake removes each one as
+    # soon as the last job that needs it has finished -- peak disk is a
+    # fraction of the ~49 GB the tree used to reach, and a finished run leaves
+    # only the final outputs under sub-*/ plus qc/.
+    #
+    # Snakemake's own --notemp turns that off wholesale (dag.py:1015), so it is
+    # the single switch for "keep the intermediates", and no bespoke flag is
+    # needed. Archiving follows the same switch: zipping a tree that is being
+    # deleted as it is built would be meaningless.
+    #
+    # The sweep below is not redundant. temp() only covers *declared* outputs,
+    # and segment_volumes deliberately writes its mask cache outside its
+    # declared output (see brainmask.smk -- Snakemake erases directory()
+    # outputs before re-running, which would destroy resumability). That cache,
+    # and the now-empty directory skeleton, are what is left to remove.
+    _work = Path(config["output_dir"]) / "work"
+    if not workflow.storage_settings.notemp:
+        if _work.exists():
+            shutil.rmtree(_work, ignore_errors=True)
+            print("[work] removed {} (pass --notemp to keep intermediates)".format(_work))
+    elif not config.get("no_archive_work"):
+        # Package the kept tree. An onsuccess hook rather than a rule,
+        # deliberately: making work.zip a DAG output would force it rebuilt
+        # whenever anything under work/ changed, which for a ~49 GB tree is
+        # minutes of pointless zipping on every partial re-run.
         # scripts/ sits beside the package when the app folder is the project
         # root; one level further up if the app is nested in a larger tree.
         _base = Path(workflow.basedir)
@@ -69,13 +90,12 @@ onsuccess:
             None,
         )
         if _archive:
-            # work/ is deleted once the zip is verified, unless --keep-work.
-            # Failure here must not fail the run: the pipeline has already
-            # succeeded and every final output lives outside work/.
-            shell("bash {} {} {} || echo '[archive] failed (non-fatal)'".format(
-                _archive,
-                Path(config["output_dir"]) / "work",
-                "--keep" if config.get("keep_work") else ""))
+            # Zip and KEEP: the user asked for the intermediates via --notemp,
+            # so removing them here would contradict that. Failure must not
+            # fail the run -- the pipeline has already succeeded and every
+            # final output lives outside work/.
+            shell("bash {} {} || echo '[archive] failed (non-fatal)'".format(
+                _archive, _work))
         else:
             print("[archive] archive_work.sh not found; skipping")
 

@@ -16,7 +16,7 @@ rule union_mask:
     input:
         maskdir=rules.segment_volumes.output.maskdir,
     output:
-        mask=work("unionmask", extension=".mif"),
+        mask=temp(work("unionmask", extension=".mif")),
     conda:
         tool_env("mrtrix")
     shell:
@@ -35,7 +35,7 @@ rule dilate_union_mask:
     input:
         mask=rules.union_mask.output.mask,
     output:
-        mask=work("unionmaskdilated", extension=".mif"),
+        mask=temp(work("unionmaskdilated", extension=".mif")),
     params:
         npass=lambda w: hp("mask_dilate_npass", default=3),
     conda:
@@ -55,8 +55,8 @@ rule crop_dwi:
         dwi=rules.rician_correct.output.dwi,
         mask=rules.dilate_union_mask.output.mask,
     output:
-        dwi=work("dwicrop", extension=".mif"),
-        mask=work("maskcrop", extension=".nii.gz"),
+        dwi=temp(work("dwicrop", extension=".mif")),
+        mask=temp(work("maskcrop", extension=".nii.gz")),
     conda:
         tool_env("mrtrix")
     shell:

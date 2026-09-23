@@ -17,7 +17,7 @@ rule match_mask_to_dwi:
         mask=rules.crop_dwi.output.mask,
         dwi=rules.crop_dwi.output.dwi,
     output:
-        mask=work("biasmask", extension=".nii.gz"),
+        mask=temp(work("biasmask", extension=".nii.gz")),
     conda:
         tool_env("mrtrix")
     shell:
@@ -31,8 +31,8 @@ rule bias_correct:
         dwi=rules.crop_dwi.output.dwi,
         mask=rules.match_mask_to_dwi.output.mask,
     output:
-        dwi=work("dwibc", extension=".mif"),
-        field=work("biasfield", extension=".mif"),
+        dwi=temp(work("dwibc", extension=".mif")),
+        field=temp(work("biasfield", extension=".mif")),
     conda:
         tool_env("ants")
     shell:
