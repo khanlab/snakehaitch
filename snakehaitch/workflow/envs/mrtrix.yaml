@@ -1,0 +1,15 @@
+# MRtrix3 -- steps 1,2,3,5 and all tractography.
+#
+# Platform note: the `mrtrix3` channel publishes linux-64 and osx-64 only, and
+# bioconda publishes linux-64 / linux-aarch64. There is NO win-64 build, which
+# is why native Windows is not supported; use WSL2 (which is linux-64).
+# On Apple silicon the osx-64 build runs under Rosetta 2.
+name: haitch-mrtrix
+channels:
+  - mrtrix3
+  - conda-forge
+  - bioconda
+dependencies:
+  - mrtrix3=3.0.8
+  - python=3.11
+  - numpy

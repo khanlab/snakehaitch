@@ -1,0 +1,16 @@
+# ANTs -- N4 bias correction (step 7) and all registration (downstream).
+# conda-forge publishes linux-64, osx-64, osx-arm64. No win-64: use WSL2.
+# dwibiascorrect is an MRtrix script that shells out to N4BiasFieldCorrection,
+# so MRtrix must be present in this env too.
+name: haitch-ants
+channels:
+  - conda-forge
+  - mrtrix3
+  - bioconda
+dependencies:
+  - ants=2.6.5
+  - mrtrix3=3.0.8
+  - python=3.11
+  - numpy
+  - scipy
+  - nibabel

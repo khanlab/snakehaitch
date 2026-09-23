@@ -1,0 +1,39 @@
+[project]
+name = "snakehaitch"
+version = "0.1.0"
+description = "SnakeHAITCH -- HAITCH fetal dMRI preprocessing and motion correction as a Snakebids BIDS app"
+readme = "README.md"
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+]
+
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "snakebids>=0.15.0",
+    "snakemake>=8.1.2; python_version >= '3.11'",
+    "snakemake>=7.20,<8; python_version < '3.11'",
+    "pulp < 2.8.0; python_version < '3.11'",
+]
+
+[project.scripts]
+snakehaitch = "snakehaitch.run:app.run"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["snakehaitch*"]
+
+[tool.setuptools.package-data]
+snakehaitch = [
+    "config/*.yml",
+    "workflow/Snakefile",
+    "workflow/rules/*.smk",
+    "workflow/envs/*.yaml",
+    "workflow/scripts/*",
+    "pipeline_description.json",
+]

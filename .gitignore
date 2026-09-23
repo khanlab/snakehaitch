@@ -1,0 +1,46 @@
+# ---------------------------------------------------------------- pixi ------
+# Conda prefixes hardcode absolute paths, so they are machine-specific and
+# cannot be shared. pixi.lock IS committed -- that is what makes the
+# environments reproducible.
+.pixi/
+
+# ------------------------------------------------------------- pipeline -----
+# Nothing produced by a run belongs in the repo.
+derivatives/
+work/
+work.zip
+.snakemake/
+*.snakemake.log
+
+# ------------------------------------------------------------------ data ----
+# Never commit imaging data. These patterns are deliberately broad: this is a
+# clinical-imaging pipeline and subject data must not reach a public remote.
+bids/
+data/
+*.nii
+*.nii.gz
+*.mif
+*.bval
+*.bvec
+*.bvals
+*.bvecs
+*.tck
+*.trk
+sub-*/
+participants.tsv
+
+# Model weights are fetched at runtime (127 MB, digest-verified).
+*.pth
+
+# --------------------------------------------------------------- python -----
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+
+# ----------------------------------------------------------------- misc -----
+.DS_Store
+*.swp
+*.partial

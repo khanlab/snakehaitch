@@ -1,0 +1,88 @@
+# =============================================================================
+#  HAITCH -- fetal dMRI preprocessing + motion correction, as a Snakebids app
+# =============================================================================
+#
+#  Port of HAITECH-Locally-Adapted-Version/dMRI_HAITCH_Fixed.sh.
+#
+#  Mapping from the original step-numbered bash to rules:
+#
+#    STEP1  denoise (GSVS)            -> rules/preproc.smk    : denoise
+#    STEP2  Gibbs ringing             -> rules/preproc.smk    : degibbs
+#    STEP3  Rician bias               -> rules/preproc.smk    : rician_correct
+#    STEP4  fetal brain extraction    -> rules/brainmask.smk  : segment_volumes
+#    STEP5  split / crop / skullstrip -> rules/crop.smk       : crop_dwi
+#    STEP6  distortion correction     -- omitted: single-TE, single-PE data
+#    STEP7  B1 bias field             -> rules/biasfield.smk  : bias_correct
+#    STEP8  3D-SHORE motion correction-> rules/motioncorr.smk : shore_iterate
+#    STEP9/10 + the four downstream
+#           bash scripts              -> rules/downstream.smk (--downstream)
+#
+#  Step 6 is deliberately not ported: the data is single-echo with one phase
+#  encoding direction, so the original script's own fallback branch printed
+#  "No 2nd TE available ==> No Distortion Correction will be done" and did
+#  nothing. Porting it would mean porting dead code.
+# =============================================================================
+
+from snakebids import bids, generate_inputs, get_wildcard_constraints
+
+configfile: 'config/snakebids.yml'
+
+
+inputs = generate_inputs(
+    bids_dir=config["bids_dir"],
+    pybids_inputs=config["pybids_inputs"],
+    pybidsdb_dir=config.get("pybidsdb_dir"),
+    pybidsdb_reset=config.get("pybidsdb_reset"),
+    derivatives=config.get("derivatives", None),
+    participant_label=config.get("participant_label", None),
+    exclude_participant_label=config.get("exclude_participant_label", None),
+    validate=not config.get("plugins.validator.skip", False),
+)
+
+wildcard_constraints:
+    **get_wildcard_constraints(config["pybids_inputs"]),
+
+
+include: "rules/common.smk"
+include: "rules/preproc.smk"
+include: "rules/brainmask.smk"
+include: "rules/crop.smk"
+include: "rules/biasfield.smk"
+include: "rules/motioncorr.smk"
+include: "rules/downstream.smk"
+
+
+onsuccess:
+    # Package the intermediate tree once the whole workflow has succeeded.
+    # An onsuccess hook rather than a rule, deliberately: making work.zip a
+    # DAG output would force it to be rebuilt whenever anything under work/
+    # changed, which for a ~49 GB tree is minutes of pointless zipping on
+    # every partial re-run.
+    if not config.get("no_archive_work"):
+        # scripts/ sits beside the package when the app folder is the project
+        # root; one level further up if the app is nested in a larger tree.
+        _base = Path(workflow.basedir)
+        _archive = next(
+            (c for c in (_base.parents[1] / "scripts" / "archive_work.sh",
+                         _base.parents[2] / "scripts" / "archive_work.sh")
+             if c.exists()),
+            None,
+        )
+        if _archive:
+            shell("bash {} {} || echo '[archive] failed (non-fatal)'".format(
+                _archive, Path(config["output_dir"]) / "work"))
+        else:
+            print("[archive] archive_work.sh not found; skipping")
+
+
+rule all:
+    """Default target: preprocessing through step 8 (motion-corrected DWI)."""
+    input:
+        dwi=inputs["dwi"].expand(rules.shore_finalize.output.dwi),
+        bvec=inputs["dwi"].expand(rules.shore_finalize.output.bvec),
+        qc=inputs["dwi"].expand(rules.segmentation_qc.output.plot),
+        # Downstream products are requested only when --downstream is passed.
+        **({"downstream": inputs["dwi"].expand(rules.tract_density.output.density,
+                                               bundle=list(config["haitch"]["bundles"]))}
+           if config.get("downstream") else {}),
+    default_target: True

@@ -1,0 +1,12 @@
+{
+    "Name": "snakehaitch",
+    "BIDSVersion": "1.8.0",
+    "DatasetType": "derivative",
+    "GeneratedBy": [
+        {
+            "Name": "snakehaitch",
+            "Version": "0.1.0",
+            "CodeURL": "https://github.com/IntelligentImaging/HAITCH"
+        }
+    ]
+}

@@ -1,0 +1,212 @@
+# =============================================================================
+#  HAITCH BIDS app -- snakebids configuration
+# =============================================================================
+#  This file replaces the role of the old run_batch_haitch.sh discovery loop:
+#  pybids finds the DWI runs instead of `find data -path '*/ses-*/dwi/run-*'`.
+#
+#  Pipeline hyperparameters (the former haitch_params.sh) live at the bottom
+#  under `snakehaitch:` and are all exposed on the CLI via `parse_args`.
+# =============================================================================
+
+analysis_levels:
+  - participant
+
+# `all` stops after step 8 (motion-corrected output).
+# `downstream` additionally runs atlas->T2w, labels->DWI, ROI, AF/SLF tracking,
+# and is selected with --downstream.
+targets_by_analysis_level:
+  participant:
+    - 'all'
+
+# -----------------------------------------------------------------------------
+# Input components
+# -----------------------------------------------------------------------------
+# Requires a BIDS-valid dataset. The raw HAITCH layout is NOT valid -- convert
+# first with scripts/bidsify_haitch.py.
+#
+#   expects: sub-<S>/ses-<V>/dwi/sub-<S>_ses-<V>_run-<R>_dwi.nii.gz
+#            + matching .bval / .bvec / .json
+pybids_inputs:
+  dwi:
+    filters:
+      suffix: dwi
+      extension: .nii.gz
+      datatype: dwi
+    wildcards:
+      - subject
+      - session
+      - run
+
+  # Subject T2w, used by the downstream registration/ROI stages only.
+  # Optional: absent for subjects that have no structural scan.
+  t2w:
+    filters:
+      suffix: T2w
+      extension: .nii.gz
+      datatype: anat
+    wildcards:
+      - subject
+      - session
+
+# -----------------------------------------------------------------------------
+# Command-line parameters
+# -----------------------------------------------------------------------------
+parse_args:
+  --downstream:
+    help: >
+      After preprocessing, also run the downstream stages (atlas->T2w
+      propagation, labels->DWI, ROI extraction, AF/SLF tractography).
+      Requires a T2w image and an age-matched atlas per subject.
+    action: store_true
+
+  --atlas-dir:
+    help: >
+      Directory holding the gestational-age-matched atlas pair,
+      t2w_GA<weeks>_atlas.nii.gz and t2w_GA<weeks>_regional.nii.gz.
+      Required with --downstream.
+    type: Path
+
+  --no-archive-work:
+    help: >
+      Skip zipping the intermediate work/ tree when the run finishes. The
+      archive is created in store mode (contents are already compressed), and
+      the source tree is kept -- Snakemake needs it to resume.
+    action: store_true
+
+  --skip-steps:
+    help: >
+      Space-separated step names to skip, e.g. --skip-steps denoise degibbs.
+      Equivalent to marking them DONE in the old user_config_steps1_8.sh.
+    nargs: '+'
+    default: []
+
+  # ---- step 1: denoising ----
+  --denoise-estimator:
+    help: "dwidenoise noise estimator (default: %(default)s)"
+    choices: ['Exp1', 'Exp2']
+    default: 'Exp2'
+
+  # ---- step 3: Rician bias ----
+  # CHOOSE THIS BY SHELL STRUCTURE -- it is a data-dependent decision:
+  #
+  #   MULTI-SHELL data  -> LOWSNR
+  #       High-b volumes have poor SNR and bias the noise estimate, so the
+  #       noise map is estimated from the lowest non-zero shell only. This is
+  #       upstream HAITCH's default and is correct for the multi-shell
+  #       acquisitions HAITCH was designed around.
+  #
+  #   SINGLE-SHELL data -> STANDARD
+  #       With one non-zero shell there is no high-b contamination to avoid,
+  #       and the "lowest shell" is nearly the whole dataset -- so LOWSNR runs
+  #       a second, near-duplicate dwidenoise pass (6-16 min/subject here) to
+  #       reproduce a noise map that step 1 already emitted for free.
+  #
+  # Measured on this cohort (sub-FINDM075 ses-01, 1 b0 + 136 b=700, so the
+  # low-b subset is 99% of the data):
+  #       noisemapfull mean 27.1111 | noisemaplowb mean 27.1530  (0.15% apart)
+  #       mean |difference| = 0.196 = 0.72% of the noise level
+  # i.e. the extra pass changes the noise map by under 1%. The three
+  # 150-volume sessions have 14 b0s, so their low-b subset is 91% of the data
+  # and would differ somewhat more -- not measured.
+  #
+  # Default is STANDARD because this project's data is single-shell.
+  # Switch to LOWSNR for any multi-shell cohort.
+  --rician-method:
+    help: >
+      Noise map source for Rician correction (default: %(default)s).
+      Use STANDARD for single-shell data (reuses the noise map from step 1);
+      use LOWSNR for multi-shell data (re-estimates from the lowest non-zero
+      shell to avoid high-b SNR bias).
+    choices: ['LOWSNR', 'STANDARD']
+    default: 'STANDARD'
+
+  # ---- step 4: brain extraction ----
+  --seg-device:
+    help: "Fetal-BET compute device (default: %(default)s)"
+    choices: ['auto', 'cuda', 'mps', 'xpu', 'cpu']
+    default: 'auto'
+  --seg-precision:
+    help: "Fetal-BET inference precision (default: %(default)s)"
+    choices: ['fp32', 'fp16', 'bf16']
+    default: 'fp16'
+  --seg-overlap:
+    help: "Fetal-BET sliding-window overlap (default: %(default)s)"
+    type: float
+    default: 0.25
+  --seg-batch:
+    help: "Fetal-BET slices per forward pass (default: %(default)s)"
+    type: int
+    default: 4
+
+  # ---- step 5: crop ----
+  --mask-dilate-npass:
+    help: "Dilation passes on the union mask before cropping (default: %(default)s)"
+    type: int
+    default: 3
+
+  # ---- step 8: SHORE motion correction ----
+  --shore-epochs:
+    help: "Reconstruction iterations (default: %(default)s)"
+    type: int
+    default: 6
+  --shore-iter-reg:
+    help: "Iterations that also run volume-to-volume registration"
+    nargs: '+'
+    type: int
+    default: [1, 2, 3, 4]
+
+  # ---- downstream tractography ----
+  --tract-select:
+    help: "Streamlines kept per AF/SLF tract (default: %(default)s)"
+    type: int
+    default: 5000
+  --tract-cutoff:
+    help: "FOD amplitude cutoff for AF/SLF tracking (default: %(default)s)"
+    type: float
+    default: 0.05
+
+# -----------------------------------------------------------------------------
+# Workflow parameters not exposed on the CLI
+# -----------------------------------------------------------------------------
+snakehaitch:
+  # step 1
+  denoise:
+    nthreads: 8
+
+  # step 4 -- Fetal-BET weights. Fetched by a rule if absent; see
+  # workflow/rules/brainmask.smk and envs/fetalbet.yaml.
+  fetalbet:
+    weights_url: "docker://arfentul/fetalbet-model:first"
+    weights_layer_digest: "sha256:ad760b2c05a2d107503ef4f1c433c3aedcf8e3738d95e718eb4ef4f152754eac"
+    weights_member: "app/src/model/AttUNet.pth"
+
+  # step 9 / downstream
+  registration:
+    strategy: ants          # ants | flirt
+    regrid_vox: 1.25
+
+  # downstream tractography
+  tractography:
+    max_seeds: 1000000
+    minlength: 10
+    maxlength: 120
+    density_threshold: 2
+
+  # Atlas label IDs from T2WAtlas_labelkey-region.txt
+  labels:
+    IFGoper_L: 11
+    IFGoper_R: 12
+    IFGtri_L: 13
+    IFGtri_R: 14
+    SupraMarginal_L: 63
+    SupraMarginal_R: 64
+    Temporal_Sup_L: 81
+    Temporal_Sup_R: 82
+
+  # AF = IFG pars triangularis <-> superior temporal
+  # SLF = IFG pars opercularis <-> supramarginal
+  bundles:
+    AF_L:  {seed: IFGtri_L,  include: Temporal_Sup_L}
+    AF_R:  {seed: IFGtri_R,  include: Temporal_Sup_R}
+    SLF_L: {seed: IFGoper_L, include: SupraMarginal_L}
+    SLF_R: {seed: IFGoper_R, include: SupraMarginal_R}

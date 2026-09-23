@@ -1,0 +1,37 @@
+SnakeHAITCH
+===========
+
+This work is a derivative of HAITCH and is distributed under the GNU General
+Public License v3.0 (see LICENSE).
+
+Vendored third-party code
+-------------------------
+snakehaitch/workflow/scripts/ contains FEDI helper scripts taken from HAITCH:
+
+    FEDI_shm.py                    FEDI_shore.py
+    _fedi_applytransform.sh        _fedi_create_grad5cls_index.py
+    _fedi_dwiregistration.sh       _fedi_outlierdetection.py
+    _fedi_rotate_bvecs_ants.py     _fedi_segm_outliers.py
+    _fedi_shorerecon.py
+
+  Source : https://github.com/IntelligentImaging/HAITCH  (GPL-3.0)
+  Author : Haykel Snoussi, PhD -- IMAGINE Group, Computational Radiology
+           Laboratory, Boston Children's Hospital / Harvard Medical School
+
+All are byte-identical to upstream except _fedi_outlierdetection.py, which
+carries a 12-line additive patch marked "HAITCH-SNAKEBIDS PATCH" (an optional
+--grad argument). See CHANGES.md section 5.
+
+Derived from
+------------
+  HAITCH                https://github.com/IntelligentImaging/HAITCH        (GPL-3.0)
+  Locally adapted fork  https://github.com/Andy1Yang1/HAITECH-Locally-Adapted-Version (GPL-3.0)
+
+Invoked at runtime (not redistributed here)
+-------------------------------------------
+  SHARD-recon   https://github.com/dchristiaens/shard-recon
+                Christiaens et al., NeuroImage 2020, doi:10.1016/j.neuroimage.2020.117437
+  MRtrix3       https://github.com/MRtrix3/mrtrix3                          (MPL-2.0)
+  ANTs          https://github.com/ANTsX/ANTs
+  Snakebids     https://github.com/khanlab/snakebids
+  Fetal-BET     AttUNet weights fetched from docker.io/arfentul/fetalbet-model:first

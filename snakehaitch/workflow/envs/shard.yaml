@@ -1,0 +1,60 @@
+# SHARD-recon + the FEDI python stack -- used by the outlier-detection rule.
+#
+# WHY THIS EXISTS
+# ---------------
+# HAITCH's outlierdetection.py :: gmm_weighting() shells out to the binary
+# `dwisliceoutliergmm`. That binary is NOT part of stock MRtrix3 -- it comes
+# from the SHARD-recon module:
+#
+#     https://github.com/dchristiaens/shard-recon
+#     Christiaens et al., NeuroImage 2020, doi:10.1016/j.neuroimage.2020.117437
+#
+# The upstream HAITCH README states the requirement directly: "This pipeline
+# relies on the binary dwisliceoutliergmm found in ... shard-recon. Add the
+# location of this binary to your PATH."
+#
+# SHARD-recon is not published on conda-forge, bioconda or the mrtrix3 channel,
+# and it is an MRtrix3 *module*: it must be compiled against an MRtrix3 source
+# tree (pinned to 3.0.5 by its README), not merely linked against installed
+# binaries. So this env supplies the build toolchain and shard.post-deploy.sh
+# compiles both MRtrix3 3.0.5 and the module into $CONDA_PREFIX.
+#
+# COST: the first creation of this env compiles MRtrix3 from source and takes
+# roughly 30-60 minutes. Snakemake caches the env afterwards, so it is paid
+# once per machine. Set SHARD_BUILD_JOBS to control build parallelism.
+#
+# PLATFORMS: linux-64 and osx-arm64 both build natively -- unlike the conda
+# mrtrix3 package, a source build is not restricted to osx-64 on Apple silicon.
+name: haitch-shard
+channels:
+  - conda-forge
+dependencies:
+  # --- build toolchain for MRtrix3 3.0.5 + the shard module ---
+  - cxx-compiler
+  - c-compiler
+  - pkg-config
+  - git
+  - eigen=3.4.0
+  - zlib
+  - fftw
+  - libpng
+  - libtiff
+
+  # --- python stack for outlierdetection.py itself ---
+  # 3.11, not the container's 3.12: FEDI_shore.py does
+  # `from distutils.version import LooseVersion`, and distutils was removed
+  # from the stdlib in 3.12. The container only survives it via setuptools'
+  # shim; 3.11 has it natively. setuptools is pinned in anyway as a backstop.
+  - python=3.11
+  - setuptools
+  - numpy<2
+  # scipy pinned: FEDI_shm.py imports scipy.special.lpn, deprecated in 1.15
+  # and removed in 1.17. Upstream HAITCH pins scipy==1.15.2.
+  - scipy=1.15.*
+  - nibabel
+  - dipy>=1.9
+  - scikit-learn
+  - scikit-image
+  - matplotlib
+  - joblib
+  - tqdm

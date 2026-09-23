@@ -1,0 +1,21 @@
+# FEDI helper scripts: outlier detection, 3D-SHORE reconstruction, bvec
+# rotation, QC plotting. Pure python, so this env is fully cross-platform.
+# Versions follow the upstream HAITCH requirements.txt where they matter.
+name: haitch-fedi
+channels:
+  - conda-forge
+dependencies:
+  # 3.11 deliberately: FEDI_shore.py imports distutils, removed in 3.12.
+  - python=3.11
+  - setuptools
+  - numpy<2
+  # scipy pinned: FEDI_shm.py imports scipy.special.lpn, deprecated in 1.15
+  # and removed in 1.17. Upstream HAITCH pins scipy==1.15.2.
+  - scipy=1.15.*
+  - nibabel
+  - dipy>=1.9
+  - scikit-learn
+  - scikit-image
+  - matplotlib
+  - joblib
+  - tqdm

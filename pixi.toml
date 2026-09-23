@@ -1,0 +1,178 @@
+[workspace]
+name = "snakehaitch"
+description = "SnakeHAITCH -- HAITCH fetal dMRI preprocessing + motion correction (Snakebids BIDS app)"
+channels = ["conda-forge", "bioconda", "mrtrix3"]
+# Windows is intentionally absent: mrtrix3 and ants publish no win-64 build on
+# any channel, so the tool stack cannot exist there natively. Use WSL2 (which is
+# linux-64) or a container.
+platforms = ["osx-arm64", "osx-64", "linux-64"]
+
+# =============================================================================
+#  Driver environment -- runs Snakemake/snakebids itself
+# =============================================================================
+[dependencies]
+python = "3.11.*"
+snakemake = ">=8.14"
+# Snakemake still shells out to `conda` to activate the externally-managed
+# prefixes below, even though it never creates them.
+conda = "*"
+pip = "*"
+
+[pypi-dependencies]
+# Published snakebids, not a local clone: the app uses only released API
+# (bidsapp.app, generate_inputs, get_wildcard_constraints, and the
+# SnakemakeBidsApp / BidsValidator / Version plugins). The externally-managed
+# conda-prefix behaviour this port depends on is Snakemake's, not snakebids'.
+snakebids = ">=0.15.0"
+snakehaitch = { path = ".", editable = true }
+
+# =============================================================================
+#  Per-rule tool environments
+# =============================================================================
+#  Each becomes .pixi/envs/<name>, a real conda prefix. The workflow rules point
+#  at those prefixes via `conda:`, which Snakemake treats as externally managed
+#  (CondaEnvSpecType.DIR -> is_externally_managed -> create_conda_envs skips it).
+#
+#  That is what buys per-environment platform control: Snakemake never calls
+#  `conda env create`, so the process-wide CONDA_SUBDIR problem disappears and
+#  pixi decides the architecture per environment.
+
+# --- MRtrix3: steps 1,2,3,5 and all tractography --------------------------
+# No osx-arm64 build exists, so this environment is restricted to the platforms
+# that have one. On Apple silicon install it with `--platform osx-64` (Rosetta).
+[feature.mrtrix]
+platforms = ["osx-64", "linux-64"]
+# mrtrix3's osx-64 build requires __osx >=14.5, above pixi's default floor for
+# that subdir. Raising it here makes pixi name the platform "osx-64-macos-14-5";
+# scripts/pixi_setup_envs.sh discovers that identifier rather than hardcoding it.
+[feature.mrtrix.system-requirements]
+macos = "14.5"
+[feature.mrtrix.dependencies]
+mrtrix3 = "3.0.8.*"
+python = "3.11.*"
+numpy = "<2"
+
+# --- ANTs: N4 bias correction + all registration --------------------------
+# ANTs itself has an osx-arm64 build, but the FEDI registration scripts also
+# call mrconvert/mrcat/mrinfo, so this env inherits MRtrix's platform limits.
+[feature.ants]
+platforms = ["osx-64", "linux-64"]
+[feature.ants.system-requirements]
+macos = "14.5"
+[feature.ants.dependencies]
+ants = "2.6.*"
+mrtrix3 = "3.0.8.*"
+python = "3.11.*"
+numpy = "<2"
+scipy = "*"
+nibabel = "*"
+
+# --- FEDI helper scripts: pure python, native everywhere ------------------
+# python 3.11, not 3.12: FEDI_shore.py does
+# `from distutils.version import LooseVersion`, and distutils left the stdlib in
+# 3.12. setuptools is pinned as a backstop.
+[feature.fedi.dependencies]
+python = "3.11.*"
+setuptools = "*"
+# Versions mirror HAITCH/requirements.txt EXACTLY. The vendored FEDI scripts are
+# written against that 2024-era stack and break in non-obvious ways on newer
+# releases. Four separate failures were traced to drift:
+#   python 3.12 -> distutils removed from stdlib        (FEDI_shore)
+#   scipy 1.17  -> scipy.special.lpn removed            (FEDI_shm)
+#   fury absent -> dipy.viz.window not exposed          (shorerecon, dead import)
+#   dipy 1.12   -> requires numpy>=2, but numpy is 1.26 (FEDI_shore)
+# cvxpy is invisible to static analysis -- it arrives via dipy's
+# optional_package() and the SHORE model raises at construction without it.
+# Do not loosen these without re-running step 8 end to end.
+numpy = "1.26.4"
+scipy = "1.15.2"
+dipy = "1.9.0"
+cvxpy = "1.6.*"
+fury = "0.11.*"
+nibabel = "5.3.2"
+scikit-learn = "1.6.1"
+matplotlib = "3.10.*"
+joblib = "1.4.2"
+tqdm = "*"
+
+[feature.fetalbet.dependencies]
+python = "3.11.*"
+pytorch = ">=2.2"
+numpy = "<2"
+nibabel = "*"
+scipy = "*"
+tqdm = "*"
+pip = "*"
+[feature.fetalbet.pypi-dependencies]
+monai = "==1.2.0"
+
+# --- SHARD-recon: dwisliceoutliergmm, built from source -------------------
+# Not packaged on any channel and it is an MRtrix3 *module*, so it must be
+# compiled. Because it builds from source it needs no prebuilt mrtrix3 package
+# and therefore runs NATIVELY on Apple silicon -- unlike the mrtrix feature.
+# Build it with: pixi run build-shard
+[feature.shard.dependencies]
+python = "3.11.*"
+setuptools = "*"
+# build toolchain for MRtrix3 + the SHARD module
+cxx-compiler = "*"
+c-compiler = "*"
+pkg-config = "*"
+git = "*"
+eigen = "3.4.*"
+zlib = "*"
+fftw = "*"
+libpng = "*"
+libtiff = "*"
+# Versions mirror HAITCH/requirements.txt EXACTLY. The vendored FEDI scripts are
+# written against that 2024-era stack and break in non-obvious ways on newer
+# releases. Four separate failures were traced to drift:
+#   python 3.12 -> distutils removed from stdlib        (FEDI_shore)
+#   scipy 1.17  -> scipy.special.lpn removed            (FEDI_shm)
+#   fury absent -> dipy.viz.window not exposed          (shorerecon, dead import)
+#   dipy 1.12   -> requires numpy>=2, but numpy is 1.26 (FEDI_shore)
+# cvxpy is invisible to static analysis -- it arrives via dipy's
+# optional_package() and the SHORE model raises at construction without it.
+# Do not loosen these without re-running step 8 end to end.
+numpy = "1.26.4"
+scipy = "1.15.2"
+dipy = "1.9.0"
+cvxpy = "1.6.*"
+fury = "0.11.*"
+nibabel = "5.3.2"
+scikit-learn = "1.6.1"
+matplotlib = "3.10.*"
+joblib = "1.4.2"
+tqdm = "*"
+
+[environments]
+mrtrix = { features = ["mrtrix"], no-default-feature = true }
+ants = { features = ["ants"], no-default-feature = true }
+fedi = { features = ["fedi"], no-default-feature = true }
+fetalbet = { features = ["fetalbet"], no-default-feature = true }
+shard = { features = ["shard"], no-default-feature = true }
+
+# =============================================================================
+#  Tasks -- pixi is the outermost wrapper
+# =============================================================================
+[tasks]
+# Convert the non-BIDS source tree into a valid BIDS dataset (one-off).
+bidsify = "python scripts/bidsify_haitch.py"
+
+# Provision every tool environment. On Apple silicon the MRtrix-dependent ones
+# are installed as osx-64 and run under Rosetta; everything else is native.
+setup = { cmd = "bash scripts/pixi_setup_envs.sh" }
+
+# Compile MRtrix3 + the SHARD module into the shard environment.
+build-shard = { cmd = "bash scripts/build_shard.sh", depends-on = ["setup"] }
+
+# Run the pipeline. The wrapper supplies --use-conda, --resources gpu=1 and
+# --rerun-triggers mtime unless you pass your own; see scripts/run_snakehaitch.sh.
+snakehaitch = "bash scripts/run_snakehaitch.sh"
+
+# Parse-only check of the workflow graph.
+dryrun = "bash scripts/run_snakehaitch.sh ../bids ../derivatives participant -n --skip-bids-validation"
+
+# Archive the intermediate work/ tree by hand (the pipeline also does this
+# automatically on success unless --no-archive-work is passed).
+archive = "bash scripts/archive_work.sh"
