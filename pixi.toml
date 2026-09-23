@@ -173,6 +173,8 @@ snakehaitch = "bash scripts/run_snakehaitch.sh"
 # Parse-only check of the workflow graph.
 dryrun = "bash scripts/run_snakehaitch.sh ../bids ../derivatives participant -n --skip-bids-validation"
 
-# Archive the intermediate work/ tree by hand (the pipeline also does this
-# automatically on success unless --no-archive-work is passed).
+# Zip the intermediate work/ tree and delete it, by hand. The pipeline does
+# this automatically on success unless --no-archive-work or --keep-work is
+# passed. Add --keep here for the same effect:
+#   pixi run archive ../derivatives/work --keep
 archive = "bash scripts/archive_work.sh"

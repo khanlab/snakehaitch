@@ -387,8 +387,9 @@ convenience; for a production run pass the full set:
 ```
 
 **On success** the workflow zips `work/` to `work.zip` in store mode via an
-`onsuccess` hook — not a rule, so it is not rebuilt on every partial re-run.
-Disable with `--no-archive-work`.
+`onsuccess` hook — not a rule, so it is not rebuilt on every partial re-run —
+then deletes the tree. `--keep-work` retains it; `--no-archive-work` skips the
+step entirely.
 
 ---
 
@@ -439,11 +440,24 @@ compression use `tar` + `zstd`.
 It is a hook rather than a rule deliberately: making `work.zip` a DAG output
 would force it rebuilt whenever anything under a ~49 GB tree changed.
 
-The source tree is **kept** — Snakemake reads it to decide what is already
-done, so deleting it forces a full recompute. Removal is opt-in:
+The source tree is then **deleted**, but only after verification: the archive
+is written to a `.partial` name, renamed atomically, and its file-entry count
+compared against `find work/ -type f`. A mismatch, or any non-zero exit from
+`zip`, aborts before the `rm` and leaves the tree in place. `zipinfo` reads
+only the central directory, so the check is instant even at 49 GB — unlike
+`zip -T`, which would read every byte back.
+
+Deleting `work/` costs resumability. Snakemake reads it to decide what is
+already done, and the segmentation mask cache lives under it, so a subsequent
+incremental run — adding a subject, `--forcerun`, resuming a partial cohort —
+recomputes instead of resuming. Outputs under `<output_dir>/sub-*/` live
+outside `work/` and are unaffected.
 
 ```bash
-pixi run archive <output_dir>/work --remove
+--keep-work                                    # zip, keep the tree
+--no-archive-work                              # neither zip nor delete
+pixi run archive <output_dir>/work --keep      # by hand, keeping it
+unzip -d <output_dir> <output_dir>/work.zip    # restore afterwards
 ```
 
 ---
@@ -466,6 +480,7 @@ All exposed on the CLI; defaults in `config/snakebids.yml`.
 | `--tract-select` | 5000 | downstream |
 | `--tract-cutoff` | 0.05 | downstream |
 | `--atlas-dir` | — | downstream |
+| `--keep-work` | off | post |
 | `--no-archive-work` | off | post |
 
 Non-CLI parameters (whole-brain tckgen settings, atlas label IDs, bundle

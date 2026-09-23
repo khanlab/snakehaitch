@@ -68,9 +68,15 @@ parse_args:
 
   --no-archive-work:
     help: >
-      Skip zipping the intermediate work/ tree when the run finishes. The
-      archive is created in store mode (contents are already compressed), and
-      the source tree is kept -- Snakemake needs it to resume.
+      Skip the end-of-run archive step entirely. work/ is neither zipped nor
+      deleted. Use this while iterating on the same output directory.
+    action: store_true
+
+  --keep-work:
+    help: >
+      Zip work/ as usual but keep the tree instead of deleting it. Snakemake
+      needs work/ to resume, so keep it if you intend to add subjects or
+      re-run rules against this output directory.
     action: store_true
 
   --skip-steps:

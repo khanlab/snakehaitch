@@ -69,8 +69,13 @@ onsuccess:
             None,
         )
         if _archive:
-            shell("bash {} {} || echo '[archive] failed (non-fatal)'".format(
-                _archive, Path(config["output_dir"]) / "work"))
+            # work/ is deleted once the zip is verified, unless --keep-work.
+            # Failure here must not fail the run: the pipeline has already
+            # succeeded and every final output lives outside work/.
+            shell("bash {} {} {} || echo '[archive] failed (non-fatal)'".format(
+                _archive,
+                Path(config["output_dir"]) / "work",
+                "--keep" if config.get("keep_work") else ""))
         else:
             print("[archive] archive_work.sh not found; skipping")
 

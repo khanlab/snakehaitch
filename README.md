@@ -134,7 +134,8 @@ particularly `--rerun-triggers mtime`, which is a development default.
 | `--shore-epochs` | 6 | a faster first pass → `3` |
 | `--seg-device` | `auto` | forcing `cpu` / `cuda` / `mps` |
 | `--downstream` | off | you have T2w + an atlas (untested) |
-| `--no-archive-work` | off | you do not want `work/` zipped |
+| `--keep-work` | off | you will re-run against this output dir — keeps `work/` |
+| `--no-archive-work` | off | you want neither the zip nor the deletion |
 
 `pixi run snakehaitch --help` lists everything.
 [PIPELINE.md](PIPELINE.md#parameter-reference) has the full table and the
@@ -153,15 +154,23 @@ reasoning behind each default.
 │   └── ..._desc-brain_mask.nii.gz     brain mask
 ├── qc/..._segmentation.png            per-volume mask QC
 ├── work/                              intermediates (large)
-└── work.zip                           archive, written on success
+└── work.zip                           archive; work/ is deleted once verified
 ```
 
 Check `qc/*_segmentation.png` first. Mask volume dropping and component counts
 rising at high b-value is expected — step 5 takes a union across volumes for
 exactly that reason.
 
-`work/` is zipped on success but **not deleted** — Snakemake needs it to
-resume. To remove it: `pixi run archive <output_dir>/work --remove`.
+On success `work/` is zipped to `work.zip` in store mode and then **deleted**.
+Deletion happens only after the archive is verified to hold exactly as many
+files as the tree did; if that check fails, the tree is left alone.
+
+The cost is resumability: Snakemake reads `work/` to decide what is already
+done, and the segmentation mask cache lives there. Once it is gone, a later
+incremental run recomputes rather than resumes. Final outputs under
+`sub-*/` are unaffected. Pass `--keep-work` if you intend to keep working on
+the same output directory, or restore with
+`unzip -d <output_dir> <output_dir>/work.zip`.
 
 ---
 
