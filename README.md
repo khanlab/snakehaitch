@@ -86,7 +86,7 @@ cd snakehaitch-app
 
 pixi install          # driver environment
 pixi run setup        # per-rule tool environments
-pixi run build-shard  # compiles SHARD-recon -- 30-60 min, once
+pixi run build-shard  # compiles SHARD-recon -- 5-10 min, once
 ```
 
 `build-shard` compiles MRtrix3 from source. It is unavoidable:
