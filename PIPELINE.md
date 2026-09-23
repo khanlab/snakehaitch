@@ -7,10 +7,11 @@ For deviations from the original HAITCH, see [CHANGES.md](CHANGES.md).
 For how to run it, see [README.md](README.md).
 
 **Validation status.** Steps 1–8 are tested on macOS (Apple silicon) against a
-5-run fetal cohort. The downstream block has **never been executed** — the
-cohort has no T2w images. Linux is expected to work but is unrun; there,
-MRtrix and ANTs are native rather than Rosetta, and segmentation uses CUDA
-rather than Metal.
+5-run fetal cohort. The downstream block is **not validated**: it requires the
+DWI to be co-registered to the subject's T2w, and in fetal data that alignment
+is normally a manually initiated step (see the downstream section). Linux is
+expected to work but is unrun; there, MRtrix and ANTs are native rather than
+Rosetta, and segmentation uses CUDA rather than Metal.
 
 ---
 
@@ -306,7 +307,18 @@ The bvec index is **derived** from `--shore-iter-reg`, not hardcoded.
 Requires a T2w per subject and `--atlas-dir` holding
 `t2w_GA<weeks>_atlas.nii.gz` + `t2w_GA<weeks>_regional.nii.gz`.
 
-> Ported but **never executed** — the development cohort has no T2w images.
+> Ported but **not validated**. These stages hinge on DWI→T2w co-registration,
+> which for fetal data is normally a manually initiated step: head pose is
+> arbitrary and differs between the structural and diffusion acquisitions, so
+> `antsRegistrationSyNQuick` generally needs a manual initial alignment before
+> it converges.
+>
+> Both references acknowledge this with a `REGSTRAT=manual` path that imports a
+> matrix prepared in Slicer or ITK-SNAP
+> (`dMRI_HAITCH_Fixed.sh:1898`, `dMRI_HAITCH.sh:1921`). The port implements
+> **only `ants`** — the fork's default (`REGSTRAT="${REGSTRAT:-ants}"`) — so
+> `manual` is unavailable. Budget for supervising this stage rather than
+> expecting it to run unattended.
 
 | rule | env | action |
 |---|---|---|

@@ -28,8 +28,9 @@ Status: steps 1–8 run to completion on all 5 runs of the FIND cohort
 (sub-FINDM073 ses-01, sub-FINDM075 ses-01/02, sub-FINDM081 ses-01/02),
 producing `desc-preproc_dwi.{nii.gz,bval,bvec}` and `desc-brain_mask.nii.gz`
 per run, plus 5 segmentation QC plots. The downstream stages (atlas → T2w →
-DWI, ROI extraction, AF/SLF tractography) are ported but unexercised — the
-cohort has no T2w images.
+DWI, ROI extraction, AF/SLF tractography) are ported but not validated: they
+require the DWI to be co-registered to the subject T2w, which in fetal data is
+normally a manually initiated step.
 
 ---
 
@@ -550,8 +551,24 @@ pass the full trigger set explicitly.
    needed, `split_volumes` should refuse to run when `EchoTime` is an array,
    rather than silently producing wrong output.
 
-1. **Downstream stages unexercised** — the cohort has no T2w images, so
-   `--downstream` has never run against real data.
+1. **Downstream stages not validated.** `--downstream` has never run against
+   real data. Beyond the missing T2w images in this cohort, the stage rests on
+   DWI→T2w co-registration, which in fetal imaging is normally **manually
+   initiated** — fetal head pose is arbitrary and differs between the
+   structural and diffusion acquisitions, so `antsRegistrationSyNQuick`
+   typically needs a manual initial alignment to converge. Both references
+   provide for this with `REGSTRAT=manual`, importing a matrix prepared in
+   Slicer or ITK-SNAP (`dMRI_HAITCH_Fixed.sh:1898`, `dMRI_HAITCH.sh:1921`).
+
+   **The port implements only `REGSTRAT=ants`.** That matches the locally
+   adapted fork, which sets `REGSTRAT="${REGSTRAT:-ants}"` in
+   `haitch_params.sh:153`, `user_config_steps1_8.sh:22` and
+   `run_batch_haitch.sh:43`. Upstream HAITCH never assigns `REGSTRAT` at all,
+   so there its `ants` branch is unreachable: it takes `manual` when
+   `REG/MANUAL_REG_MATRIX.txt` exists and otherwise falls through to a FLIRT
+   `else` branch (`dMRI_HAITCH.sh:1949-1953`). Neither `manual` nor that FLIRT
+   fallback is ported. The rules provide scaffolding around the registration
+   step; they do not remove the need for it.
 2. **`--skip-steps`** is parsed but not enforced in the rule graph.
 3. **`_fedi_dwiregistration.sh` / `_fedi_rotate_bvecs_ants.py` wrappers** are
    exercised only through the 20 `shore_register` jobs in this cohort; their

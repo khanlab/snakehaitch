@@ -34,16 +34,29 @@ WSL2.
 | | |
 |---|---|
 | Steps 1–8 (denoise → motion correction) | tested, 5 runs |
-| **Downstream (`--downstream`)** | **ported but NEVER RUN** — see below |
+| **Downstream (`--downstream`)** | **ported, not validated** — see below |
 | Single-echo data | required |
 | Multi-echo data | **not supported**, fails silently |
 | Single-shell / multi-shell | both expected to work; only single-shell tested |
 
-> **The downstream stages are untested.** Atlas → T2w registration, label
-> propagation to DWI, ROI extraction and AF/SLF tractography are all
-> implemented, but the development cohort had no T2w images, so none of that
-> code has ever executed. Expect to debug it. Everything before
-> `shore_finalize` has been exercised on real data.
+> **The downstream stages are not validated.** Atlas → T2w registration,
+> label propagation to DWI, ROI extraction and AF/SLF tractography are all
+> implemented, but they depend on the DWI being co-registered to the subject's
+> T2w — and in fetal imaging that alignment is typically a manually initiated
+> step, not something the pipeline can reliably do unattended. Fetal head pose
+> is arbitrary and varies between the structural and diffusion acquisitions,
+> so the automatic registration usually needs a manual initialisation before
+> it will converge.
+>
+> Both references acknowledge this by shipping a `REGSTRAT=manual` path, where
+> you produce the alignment matrix in Slicer or ITK-SNAP and the script imports
+> it. **Only the `ants` strategy is ported here** — which is the locally
+> adapted fork's default, but it means a case needing manual initialisation is
+> not yet catered for.
+>
+> Treat `--downstream` as a scaffold around that manual step rather than a
+> turnkey stage. Everything up to and including `shore_finalize` runs
+> unattended and has been exercised on real data.
 
 ---
 
