@@ -21,9 +21,12 @@ rule union_mask:
         tool_env("mrtrix")
     shell:
         r"""
-        first=$(ls {input.maskdir}/*_mask.nii.gz | sort | head -1)
-        mrconvert "$first" {output.mask} -force -quiet
-        for m in {input.maskdir}/*_mask.nii.gz ; do
+        # Glob, not `ls | sort | head -1`: under Snakemake's pipefail, head
+        # exiting early can SIGPIPE ls/sort (status 141) and fail the job.
+        # Globs expand sorted, so masks[0] is the same file as before.
+        masks=( {input.maskdir}/*_mask.nii.gz )
+        mrconvert "${{masks[0]}}" {output.mask} -force -quiet
+        for m in "${{masks[@]}}" ; do
             maskfilter -largest "$m" connect - -quiet | \
               mrcalc {output.mask} - -max {output.mask} -force -quiet
         done

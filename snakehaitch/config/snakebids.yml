@@ -139,6 +139,13 @@ parse_args:
     help: "Fetal-BET slices per forward pass (default: %(default)s)"
     type: int
     default: 4
+  --seg-threads:
+    help: >
+      CPU threads per Fetal-BET job (default: %(default)s). Sets both the
+      Snakemake reservation and torch's thread pool; capped at --cores. Matters
+      most with --seg-device cpu, where it is the inference parallelism.
+    type: int
+    default: 4
 
   # ---- step 5: crop ----
   --mask-dilate-npass:

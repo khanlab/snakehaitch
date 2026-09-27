@@ -92,13 +92,18 @@ rule segment_volumes:
         # already have a mask; the declared output is then materialised from
         # the cache with hardlinks (same filesystem, so no extra space).
         cachedir=work("maskcache", extension=""),
-    threads: 4
+    # --seg-threads. Passed through to torch below: torch sizes its CPU pool
+    # from the core count, not from Snakemake's reservation, so without it a
+    # CPU-only job uses every core regardless of this number.
+    threads: hp("seg_threads", default=4)
     resources:
         gpu=1,
     conda:
         tool_env("fetalbet")
     shell:
-        "python {workflow.basedir}/scripts/fetalbet_inference.py"
+        "OMP_NUM_THREADS={threads} MKL_NUM_THREADS={threads}"
+        " python {workflow.basedir}/scripts/fetalbet_inference.py"
+        " --threads {threads}"
         " --data_path {input.voldir}"
         " --save_path {params.cachedir}"
         " --saved_model_path {input.weights}"

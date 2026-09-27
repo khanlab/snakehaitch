@@ -533,6 +533,7 @@ All exposed on the CLI; defaults in `config/snakebids.yml`.
 | `--seg-precision` | `fp16` | 4 |
 | `--seg-overlap` | 0.25 | 4 |
 | `--seg-batch` | 4 | 4 |
+| `--seg-threads` | 4 | 4 |
 | `--mask-dilate-npass` | 3 | 5 |
 | `--shore-epochs` | 6 | 8 |
 | `--shore-iter-reg` | 1 2 3 4 | 8 |

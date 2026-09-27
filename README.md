@@ -20,11 +20,24 @@ pixi run snakehaitch <bids_dir> <output_dir> participant --cores 8
 **Tested on macOS** (Apple silicon, M5). Steps 1–8 run end to end on a 5-run
 fetal cohort.
 
-**Expected to work on Linux** but not yet run there. The environments are
-locked for `linux-64` and nothing in the workflow is macOS-specific — on Linux
-MRtrix and ANTs actually run *native* rather than under Rosetta, and
-segmentation picks up CUDA instead of Metal. Treat the first Linux run as a
-validation exercise.
+**Tested on Linux** (x86_64, CPU only). Steps 1–8 run end to end on one
+subject, two sessions (sub-FINDM074). MRtrix and ANTs run native, and
+`build-shard` compiles with the self-contained conda toolchain (~9 min on 10
+cores). Not yet exercised on Linux: CUDA segmentation, multi-shell data, and
+`--downstream`.
+
+The first Linux run exposed bugs that were latent on macOS and have since been
+fixed:
+
+- `cmd | head -1` under `set -o pipefail` (Snakemake's default shell mode)
+  intermittently failed with exit 141 when `head` closed the pipe before the
+  producer finished. Timing-dependent — it never triggered on local APFS, but
+  did reliably on NFS. All such pipes are removed.
+- N4 rejected the bias mask as "not in the same physical space" for one
+  session: NIfTI stores the transform in float32, so the mask origin drifted
+  ~1e-5 mm from the DWI's. The mask is now kept as `.mif`.
+- Segmentation ignored its thread reservation on CPU — torch sized its pool
+  from the core count. Now controlled by `--seg-threads`.
 
 **Windows is not supported.** MRtrix3 and ANTs publish no `win-64` build. Use
 WSL2.
@@ -68,7 +81,7 @@ WSL2.
 | pixi | `curl -fsSL https://pixi.sh/install.sh \| bash` |
 | macOS only | Xcode Command Line Tools (`xcode-select --install`), needed by `build-shard` — see below |
 | Disk | final outputs are small; intermediates dominate peak usage and are deleted as the run proceeds (`--notemp` keeps them, ~49 GB per 5-run cohort) |
-| GPU | optional — CUDA on Linux, Metal/MPS on Apple silicon, else CPU |
+| GPU | optional — CUDA on Linux (untested), Metal/MPS on Apple silicon, else CPU. On CPU, segmentation ran at ~18 s/volume with `--seg-threads 24` |
 
 MRtrix3, ANTs, PyTorch, the FEDI stack and SHARD-recon are all installed by
 pixi. You do not need conda, Docker, an existing MRtrix install, or even
@@ -119,6 +132,21 @@ pixi run bidsify ../data ../bids     # symlinks; add --copy for a standalone tre
 This fixes directory nesting, entity order, sidecar extensions, and writes
 `dataset_description.json`. Use `--dry-run` to preview.
 
+If your data is raw dcm2niix output in scanner-series folders
+(`sub-X/ses-N/DTI/*.nii` plus a reverse-PE `ses-N/DTI_b0/`), use the other
+converter:
+
+```bash
+python scripts/bidsify_dcm2niix.py ../data ../bids --dry-run
+python scripts/bidsify_dcm2niix.py ../data ../bids
+```
+
+It zero-pads sessions (`ses-1` → `ses-01`) and files the reverse-PE b0 series
+under `fmap/` as `_epi` with `IntendedFor`, so the pipeline does not mistake it
+for a second DWI run. Copied files get fresh timestamps, because source files
+transferred from another machine can carry future mtimes that Snakemake
+rejects as clock skew.
+
 ---
 
 ## Running
@@ -147,6 +175,7 @@ particularly `--rerun-triggers mtime`, which is a development default.
 | `--rician-method` | `STANDARD` | **your data is multi-shell** → `LOWSNR` |
 | `--shore-epochs` | 6 | a faster first pass → `3` |
 | `--seg-device` | `auto` | forcing `cpu` / `cuda` / `mps` |
+| `--seg-threads` | 4 | segmenting on CPU → your core count (capped at `--cores`) |
 | `--downstream` | off | you have T2w + an atlas (untested) |
 | `--notemp` | off | you want the intermediates kept (Snakemake's own flag) |
 | `--no-archive-work` | off | with `--notemp`, keep `work/` but skip the zip |

@@ -24,12 +24,12 @@ target_platform_for() {
     local env="$1" want="$2"
     pixi info 2>/dev/null \
       | awk -v e="Environment: ${env}$" '
-          $0 ~ e {f=1} f && /Target platforms:/ {print; exit}' \
+          $0 ~ e {f=1} f && /Target platforms:/ {print; f=0}' \
       | sed 's/.*Target platforms: *//' \
       | tr ',' '\n' \
       | sed 's/(.*//; s/^ *//; s/ *$//' \
-      | grep -E "^${want}(-|$)" \
-      | head -1
+      | { grep -E "^${want}(-|$)" || true; } \
+      | sed -n 1p
 }
 
 install_env() {
@@ -67,8 +67,11 @@ echo "environments ready:"
 for env in mrtrix ants fedi fetalbet shard; do
     p=".pixi/envs/$env"
     if [[ -d "$p" ]]; then
-        sub=$(ls "$p"/conda-meta/*.json 2>/dev/null | head -1 \
-              | xargs -I{} python3 -c "import json;print(json.load(open('{}')).get('subdir','?'))" 2>/dev/null)
+        # Glob instead of `ls | head -1`: under pipefail, head closing the pipe
+        # early SIGPIPEs ls (status 141) and set -e aborts the whole script.
+        metas=("$p"/conda-meta/*.json)
+        sub=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('subdir','?'))" \
+              "${metas[0]}" 2>/dev/null || true)
         printf "  %-10s %-10s %s\n" "$env" "${sub:-?}" "$p"
     else
         printf "  %-10s %s\n" "$env" "MISSING"

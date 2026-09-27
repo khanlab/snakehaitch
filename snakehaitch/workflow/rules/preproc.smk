@@ -125,7 +125,9 @@ rule lowb_noisemap:
         tool_env("mrtrix")
     shell:
         r"""
-        LOWB=$(tr ' ' '\n' < {input.bval} | awk 'NF && $1>0 {{print $1}}' | sort -n | head -1)
+        # Minimum in awk rather than `sort -n | head -1`, which can SIGPIPE
+        # under pipefail.
+        LOWB=$(tr ' ' '\n' < {input.bval} | awk 'NF && $1>0 && (m=="" || $1<m) {{m=$1}} END {{print m}}')
         dwiextract -grad {input.grad5} -shell $LOWB {input.dwi} - | \
           dwidenoise -noise {output.noise} -estimator {params.estimator} \
                      -nthreads {threads} - {output.discard}

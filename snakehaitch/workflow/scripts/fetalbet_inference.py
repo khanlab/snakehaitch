@@ -253,6 +253,8 @@ if __name__ == "__main__":
     p.add_argument("--no-resume", action="store_false", dest="resume",
                    help="re-segment volumes even if a mask already exists")
     p.add_argument("--compile", action="store_true", help="wrap model in torch.compile")
+    p.add_argument("--threads", type=int, default=None,
+                   help="torch CPU threads (default: torch's own choice, all cores)")
     p.add_argument("--deterministic", type=int, default=1)
     p.add_argument("--saved_model_path", type=str, required=True)
     p.add_argument("--data_path", type=str, required=True)
@@ -261,5 +263,7 @@ if __name__ == "__main__":
     p.add_argument("--n_gpu", type=int, default=None, help=argparse.SUPPRESS)
     args = p.parse_args()
 
+    if args.threads:
+        torch.set_num_threads(args.threads)
     set_determinism(seed=12345 if args.deterministic else None)
     inference(args)

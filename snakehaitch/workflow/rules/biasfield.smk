@@ -17,7 +17,11 @@ rule match_mask_to_dwi:
         mask=rules.crop_dwi.output.mask,
         dwi=rules.crop_dwi.output.dwi,
     output:
-        mask=temp(work("biasmask", extension=".nii.gz")),
+        # .mif, not .nii.gz: NIfTI stores the transform in float32, so the mask
+        # origin drifts ~1e-5 mm from the DWI's (full-precision .mif). N4 checks
+        # origins to 1e-6 x voxel size and aborts with "Inputs do not occupy
+        # the same physical space" -- seen on sub-FINDM074 ses-02.
+        mask=temp(work("biasmask", extension=".mif")),
     conda:
         tool_env("mrtrix")
     shell:
